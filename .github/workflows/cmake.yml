@@ -20,8 +20,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Install newst GCC
-      run: sudo apt update
-           sudo apt install gcc-11 g++-11
+      run: sudo apt update && sudo apt install -y gcc-11 g++-11
       shell: bash
 
     - name: Configure CMake
