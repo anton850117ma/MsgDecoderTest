@@ -289,9 +289,10 @@ inline void test(int64_t seed, int max_len = 8, size_t times = 100000) {
 }
 
 int main(int argc, char **argv) {
-    if (argc > 1) {
+    if (argc == 2) {
         test(std::stoll(argv[1]));
     } else {
-        while (true) { test(0, 8, 1000000); }
+        size_t times = 10;
+        while (times-- > 0) { test(0, 8, 1000000); }
     }
 }
