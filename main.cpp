@@ -292,7 +292,7 @@ int main(int argc, char **argv) {
     if (argc == 2) {
         test(std::stoll(argv[1]));
     } else {
-        size_t times = 10;
+        size_t times = 1;
         while (times-- > 0) { test(0, 8, 1000000); }
     }
 }
