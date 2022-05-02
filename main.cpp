@@ -11,11 +11,15 @@
 #include <tuple>
 #include <vector>
 
-char                            buffer[1460 * 8] = "";
-int                             buf_size         = 0;
+// buffer and buf_size in try_recv()
+char buffer[1460 * 8] = "";
+int  buf_size         = 0;
+
+// The following is just for testing
 int                             total_size, left_size;
 std::deque<std::pair<int, int>> record;
 
+// simulate Header
 struct Header {
     uint8_t type : 4, count : 4;
     void    set_header(uint8_t type, uint8_t count) {
@@ -26,6 +30,7 @@ struct Header {
     uint8_t get_count() const { return this->count; }
 };
 
+// simulate get_type_size()
 inline size_t get_type_size(int type, int count) {
     switch (type) {
         case 1: return 32 * count + 4;
@@ -38,12 +43,9 @@ inline size_t get_type_size(int type, int count) {
     return 0;
 }
 
-// simulate do_handle
+// simulate do_handle()
 inline void do_handle(std::string_view msg) {
     auto header = reinterpret_cast<const Header *>(msg.data() + 1);
-    // std::cout << "type: " << static_cast<int>(header->get_type())
-    //           << " count: " << static_cast<int>(header->get_count())
-    //           << std::endl;
     if (record.front().first == header->get_type() &&
         record.front().second == header->get_count()) {
         record.pop_front();
@@ -53,6 +55,7 @@ inline void do_handle(std::string_view msg) {
     }
 }
 
+// simulate m_handler.verify()
 inline bool verify_header(const Header *header) {
     if (header->get_type() >= 1 && header->get_type() <= 5 &&
         header->get_count() > 0) {
@@ -61,15 +64,15 @@ inline bool verify_header(const Header *header) {
     return false;
 }
 
-// simulate decode
-inline std::tuple<bool, int, int> decode(char *buf, size_t buf_size,
-                                         iovec *iov, int iov_cnt) {
+// simulate decode()
+inline std::tuple<bool, int, size_t> decode(char *buf, size_t buf_size,
+                                            iovec *iov, int iov_cnt) {
     std::vector<iovec *> packets(iov_cnt + 1);
-    std::string          msg;
+    std::string          msg;    // MsgString
 
-    int   packets_size = iov_cnt + 1, index = 0, offset = 0;
-    bool  is_used = true;
-    iovec iovec_buf  = {.iov_base = buf, .iov_len = buf_size};
+    int    packets_size = iov_cnt + 1, index = 0;
+    size_t offset    = 0;
+    iovec  iovec_buf = {.iov_base = buf, .iov_len = buf_size};
 
     packets[0] = &iovec_buf;
     for (int i = 0; i < iov_cnt; i++) { packets[i + 1] = iov + i; }
@@ -80,7 +83,9 @@ inline std::tuple<bool, int, int> decode(char *buf, size_t buf_size,
         size_t  entire_size = 0;
         Header *header;
 
+        // Determine prefix and header
         if (size > 1 && *ptr == 0x02) [[likely]] {
+            // if prefix and header can be determined in the same packet
             header = reinterpret_cast<Header *>(ptr + 1);
             if (verify_header(header)) {
                 entire_size =
@@ -89,6 +94,7 @@ inline std::tuple<bool, int, int> decode(char *buf, size_t buf_size,
                 return std::make_tuple(buf_size > 0, -1, 0);
             }
         } else if (size == 1 && *ptr == 0x02) {
+            // if prefix and header are not in the same packet
             if (index + 1 < packets_size) {
                 header = static_cast<Header *>(packets[index + 1]->iov_base);
                 if (verify_header(header)) {
@@ -98,26 +104,32 @@ inline std::tuple<bool, int, int> decode(char *buf, size_t buf_size,
                     return std::make_tuple(buf_size > 0, -1, 0);
                 }
             } else {
-                return std::make_tuple(is_used, index - 1, offset);
+                return std::make_tuple(true, index - 1, offset);
             }
         } else if (size == 0) {
+            // if current packet is empty
             index++;
             offset = 0;
             continue;
         } else {
+            // received data is not valid
             return std::make_tuple(buf_size > 0, -1, 0);
         }
 
+        // this should be handled by do_handle()
         msg.clear();
 
         if (size >= entire_size) {
+            // if current packet contains the entire message
             msg.append(ptr, entire_size);
             do_handle(msg);
             offset += entire_size;
         } else {
+            // if current packet does not contain the entire message
             auto tmp_size  = size;
             auto tmp_index = index + 1;
             bool enough    = false;
+            // check if remained packets contain the entire message
             while (tmp_index < packets_size) {
                 if (tmp_size + packets[tmp_index]->iov_len < entire_size) {
                     tmp_size += packets[tmp_index]->iov_len;
@@ -128,6 +140,7 @@ inline std::tuple<bool, int, int> decode(char *buf, size_t buf_size,
                 }
             }
             if (enough) {
+                // if remained packets contain the entire message
                 msg.append(ptr, size);
                 while (++index < tmp_index) {
                     msg.append(static_cast<char *>(packets[index]->iov_base),
@@ -138,6 +151,8 @@ inline std::tuple<bool, int, int> decode(char *buf, size_t buf_size,
                            offset);
                 do_handle(msg);
             } else {
+                // if remained packets do not contain the entire message
+                // we should copy left data to the buffer
                 return std::make_tuple(buf_size > 0, index - 1, offset);
             }
         }
@@ -147,10 +162,9 @@ inline std::tuple<bool, int, int> decode(char *buf, size_t buf_size,
 
 // simulate try_recv
 inline void recv_msgs(iovec *iov, int iov_cnt) {
-
-    bool   is_used;
-    int    index  = -1;
-    size_t offset = 0;
+    bool   is_used = true;
+    int    index   = -1;
+    size_t offset  = 0;
 
     if (iov_cnt == 0) return;
 
@@ -166,6 +180,7 @@ inline void recv_msgs(iovec *iov, int iov_cnt) {
         auto ptr = static_cast<char *>(iov[index].iov_base) + offset;
         auto len = iov[index].iov_len - offset;
         if (len + buf_size > sizeof(buffer)) {
+            // if buffer is not large enough
             memset(buffer, 0, sizeof(buffer));
             break;
         } else {
@@ -177,15 +192,16 @@ inline void recv_msgs(iovec *iov, int iov_cnt) {
     }
 }
 
+// generate random messages for testing
 inline std::string create_msg(int type, int count) {
     std::string msg;
 
     switch (type) {
-        case 1: msg.resize(get_type_size(type, count), '1');
-        case 2: msg.resize(get_type_size(type, count), '2');
-        case 3: msg.resize(get_type_size(type, count), '3');
-        case 4: msg.resize(get_type_size(type, count), '4');
-        case 5: msg.resize(get_type_size(type, count), '5');
+        case 1: msg.resize(get_type_size(type, count), '1'); break;
+        case 2: msg.resize(get_type_size(type, count), '2'); break;
+        case 3: msg.resize(get_type_size(type, count), '3'); break;
+        case 4: msg.resize(get_type_size(type, count), '4'); break;
+        case 5: msg.resize(get_type_size(type, count), '5'); break;
     }
 
     auto header = reinterpret_cast<Header *>(msg.data() + 1);
@@ -196,7 +212,8 @@ inline std::string create_msg(int type, int count) {
     return msg;
 }
 
-inline void test(int64_t seed, int max_len = 8) {
+// main test function
+inline void test(int64_t seed, int max_len = 8, size_t times = 100000) {
     if (seed == 0) {
         seed = std::chrono::system_clock::now().time_since_epoch().count();
         std::cout << "seed: " << seed << "\n";
@@ -209,7 +226,6 @@ inline void test(int64_t seed, int max_len = 8) {
     std::string left, combined;
     iovec       msgs[max_len];
     int         len, index;
-    size_t      times = 100000;
     buf_size = 0;
     memset(buffer, 0, sizeof(buffer));
     record.clear();
@@ -258,6 +274,9 @@ inline void test(int64_t seed, int max_len = 8) {
             left_size = left.size();
         }
         recv_msgs(msgs, len);
+
+        // if something is left in the record while left is empty, we have
+        // bugs to clear
         if (!record.empty() && left.empty()) {
             for (auto &msg : record) {
                 std::cout << msg.first << " " << msg.second << std::endl;
@@ -273,6 +292,6 @@ int main(int argc, char **argv) {
     if (argc > 1) {
         test(std::stoll(argv[1]));
     } else {
-        while (true) { test(0); }
+        while (true) { test(0, 8, 1000000); }
     }
 }
