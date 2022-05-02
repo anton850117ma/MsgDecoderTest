@@ -1,6 +1,7 @@
 #include <sys/uio.h>
 
 #include <chrono>
+#include <cstdlib>
 #include <cstring>
 #include <deque>
 #include <iostream>
@@ -51,7 +52,7 @@ inline void do_handle(std::string_view msg) {
         record.pop_front();
     } else {
         std::cout << "error" << std::endl;
-        pause();
+        exit(1);
     }
 }
 
