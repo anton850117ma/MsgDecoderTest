@@ -4,7 +4,17 @@ project(decoder)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # add_compile_definitions(NDEBUG)
-add_compile_options(-O3 -ggdb3 -Wall -Wextra)
+
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+  # using Clang
+  add_compile_options(-march=native -Ofast -ggdb3 -Wall -Wextra)
+elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  # using GCC
+  add_compile_options(-march=native -Ofast -ggdb3 -Wall -Wextra)
+elseif (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+  # using Visual Studio C++
+endif()
+
 
 add_executable(main main.cpp)
 
