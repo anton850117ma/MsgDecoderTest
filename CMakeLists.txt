@@ -22,5 +22,5 @@ endif()
 # add_test(NAME test3 COMMAND $<TARGET_FILE:main> 3)
 # add_test(NAME test4 COMMAND $<TARGET_FILE:main>)
 
-# add_executable(temp temp.cpp)
-add_executable(test mmin.cpp source.cpp)
+add_executable(temp temp.cpp)
+# add_executable(test mmin.cpp source.cpp)

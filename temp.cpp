@@ -8,7 +8,8 @@
 /* ====================================================================== */
 
 // TODO     Concept
-// *        1. form: requires (parameter list) {requirement sequence}
+// *        1. A concept is a named set of requirements.
+//          2. form: requires (parameter list) {requirement sequence}
 //          2. parameter list is optional
 //          3. 4 types of requirements:
 //              a. simple requirment
@@ -24,6 +25,10 @@ concept Incrementable = requires(T t) { ++t; t++;};
 
 template<typename T>
 concept Decrementable = requires(T t) { --t; t--;};
+
+// Other ways
+template<class T>
+concept Integral = std::is_integral<T>::value;
 
 /* ====================================================================== */
 
@@ -118,6 +123,30 @@ template<typename T>
 concept Concept5 = Incrementable<T> || Decrementable<T>;
 void Foo(Concept5 auto t);
 
+// Other
+template<class T>
+concept SignedIntegral = Integral<T> && std::is_signed<T>::value;
+
+template<class T>
+concept UnsignedIntegral = Integral<T> && !SignedIntegral<T>;
+
+/* ====================================================================== */
+
+// * Concepts cannot recursively refer to themselves and cannot be constrained
+
+template<typename T>
+concept V = V<T *>;       // error: recursive concept
+
+template<class T>
+concept C1 = true;
+
+template<C1 T>
+concept Error1 = true;    // Error: C1 T attempts to constrain a concept definition
+
+template<class T>
+requires C1<T>
+concept Error2 = true;    // Error: the requires-clause attempts to constrain a concept
+
 /* ====================================================================== */
 
 // * Before c++20
@@ -154,16 +183,16 @@ concept Incrementable_cpp20 = requires(T x) { ++x; x++; };
 void Boo(Incrementable_cpp20 auto t) { t++; }
 class Bar {};
 
-// int main() {
-//     Bar b;
-//     // Boo(b);
-// }
+int main() {
+    Bar b;
+    Boo(b);
+}
 
 /* ====================================================================== */
 
 // TODO         Lambda expression changes
 //              1. before c++20, [=] campture 'this' implicitly
-// !            2. since c++20, you need to be implicit, so: [=, this]
+// !            2. since c++20, you need to be explicit, so: [=, this]
 
 /* ====================================================================== */
 
@@ -254,7 +283,7 @@ auto delay_invoke(F f, Args... args) {
 
 // (1)
 constexpr int maxElement() {
-    std::vector myVec = {1, 2, 4, 3}; 
+    std::vector<int> myVec = {1, 2, 4, 3}; 
     std::sort(myVec.begin(), myVec.end());
     return myVec.back();
 }
@@ -271,16 +300,17 @@ constexpr auto forgottenRelease() {
     auto *p = new int[2020]; 
     try {
         /* ... */
-        return 2022;
+        return 2020;
     } catch (...) {
         delete[] p;
-        return 2022;
+        return 2020;
     }
 }
 
 int main() {
     constexpr int res1 = correctRelease();
-    constexpr int res2 = forgottenRelease();
+    // Compilation error: not transient constexpr allocations
+    constexpr int res2 = forgottenRelease(); 
 }
 
 /* ====================================================================== */
@@ -366,6 +396,7 @@ int main() {
 /* ====================================================================== */
 
 // * Since C++20
+//   Force constant initialization
 
 // source.cpp
 constexpr int  const_quad(int n) { return n * n; }
@@ -375,5 +406,3 @@ constinit auto init_staticA = const_quad(5);
 extern constinit int init_staticA;
 auto                 init_staticB = init_staticA;
 int main() { std::cout << "staticB: " << init_staticB << std::endl; }
-
-// Force constant initialization
